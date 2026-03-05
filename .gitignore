@@ -1,0 +1,6 @@
+node_modules/
+.env
+*.png
+.DS_Store
+database.sqlite
+schedule.json
