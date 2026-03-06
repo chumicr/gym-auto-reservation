@@ -71,6 +71,14 @@ async function runGymScraper(userId, schedule) {
             Object.defineProperty(navigator, 'languages', { get: () => ['es-ES', 'es'] });
         });
 
+        // Set common language cookies (optional but helpful)
+        const domain = new URL(targetUrl).hostname;
+        await page.setCookie(
+            { name: 'Language', value: 'es', domain: domain },
+            { name: 'lang', value: 'es', domain: domain },
+            { name: 'locale', value: 'es-ES', domain: domain }
+        );
+
         // Use a real browser User Agent to avoid being blocked as a bot
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
 
