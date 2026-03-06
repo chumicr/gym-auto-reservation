@@ -65,6 +65,12 @@ async function runGymScraper(userId, schedule) {
             'Accept-Language': 'es-ES,es;q=0.9'
         });
 
+        // Spoof language properties before any script runs
+        await page.evaluateOnNewDocument(() => {
+            Object.defineProperty(navigator, 'language', { get: () => 'es-ES' });
+            Object.defineProperty(navigator, 'languages', { get: () => ['es-ES', 'es'] });
+        });
+
         // Use a real browser User Agent to avoid being blocked as a bot
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
 
