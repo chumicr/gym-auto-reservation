@@ -290,8 +290,10 @@ async function runGymScraper(userId, schedule) {
                             return false;
                         });
                         if (confirmacionDefinitiva) {
-                            addLog(userId, '🎉 ¡Reserva confirmada con éxito!');
-                            await takeStepScreenshot(page, 'booking_confirmed');
+                            addLog(userId, '⏳ Procesando confirmación en el servidor...');
+                            await new Promise(r => setTimeout(r, 4000)); // Esperar respuesta del servidor
+                            await takeStepScreenshot(page, 'final_verification');
+                            addLog(userId, '🎉 ¡Reserva procesada! Comprueba tu app del gimnasio.');
                             await user.update({ lastExecutionStatus: 'Success', lastExecutionTime: new Date() });
                         } else {
                             addLog(userId, '❌ No se pudo confirmar la reserva (botón Aceptar no detectado).');
@@ -308,7 +310,10 @@ async function runGymScraper(userId, schedule) {
                             return false;
                         });
                         if (confirmado) {
-                            addLog(userId, '🎉 ¡Apuntado a la lista de espera correctamente!');
+                            addLog(userId, '⏳ Procesando entrada en lista de espera...');
+                            await new Promise(r => setTimeout(r, 4000)); // Esperar respuesta del servidor
+                            await takeStepScreenshot(page, 'waitlist_verification');
+                            addLog(userId, '🎉 ¡Apuntado a la lista de espera! Comprueba tu app.');
                             await user.update({ lastExecutionStatus: 'En lista de espera', lastExecutionTime: new Date() });
                         } else {
                             addLog(userId, '⚠️ Lista de espera pulsada pero confirmación fallida.');
