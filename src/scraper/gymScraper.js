@@ -164,13 +164,29 @@ async function runGymScraper(userId, schedule) {
 
             await page.waitForSelector('.calendar-wrapper .date', { timeout: 10000 });
 
-            let dayOfWeek = schedule ? parseInt(schedule.dayOfWeek) : 4;
+            let dayOfWeek = schedule ? parseInt(schedule.dayOfWeek) : 5; // Por defecto viernes (5) si no hay dato
             let targetDate = moment().isoWeekday(dayOfWeek);
-            if (moment().isoWeekday() >= dayOfWeek) { targetDate.add(1, 'week'); }
+            const now = moment();
+
+            // Si el día de la semana ya pasó (ej. es sábado y pedimos lunes), vamos a la semana que viene
+            if (now.isoWeekday() > dayOfWeek) {
+                targetDate.add(1, 'week');
+            }
+            // Si es HOY, comprobamos si la hora de la clase ya ha pasado
+            else if (now.isoWeekday() === dayOfWeek) {
+                const classTimeStr = schedule ? schedule.time : '19:30';
+                const [targetHour, targetMin] = (classTimeStr || '00:00').split(':').map(Number);
+                const classMoment = moment().hour(targetHour).minute(targetMin).second(0);
+
+                // Si la clase ya ha pasado hoy (ej. son las 20:00 y la clase era las 19:30), vamos a la semana que viene
+                if (now.isAfter(classMoment)) {
+                    targetDate.add(1, 'week');
+                }
+            }
 
             const targetDayNumber = targetDate.format('D');
             const targetMonthStr = targetDate.format('MMM').toLowerCase().substring(0, 3);
-            addLog(userId, `🔍 Buscando día ${targetDayNumber}/${targetMonthStr} en el calendario...`);
+            addLog(userId, `🔍 Buscando día ${targetDayNumber}/${targetMonthStr} (Objetivo: ${targetDate.format('DD/MM/YYYY')})...`);
 
             const dayClicked = await page.evaluate((dayNum, monthStr) => {
                 const dates = Array.from(document.querySelectorAll('.calendar-wrapper .date'));
@@ -239,11 +255,25 @@ async function runGymScraper(userId, schedule) {
                         });
                         if (alreadyReserved) return { state: 'already_reserved' };
 
-                        const disabledReserve = allButtons.find(b => b.textContent.trim().toUpperCase() === 'RESERVAR PLAZA PRESENCIAL' && (b.disabled || b.getAttribute('disabled') !== null));
+                        const disabledReserve = allButtons.find(b => {
+                            const t = b.textContent.trim().toUpperCase();
+                            return (t === 'RESERVAR PLAZA PRESENCIAL' || t.includes('RESERVAR')) && (b.disabled || b.getAttribute('disabled') !== null);
+                        });
                         if (disabledReserve) return { state: 'not_open_yet' };
 
                         const pageText = document.body.innerText.toUpperCase();
-                        if (pageText.includes('RESERVA DISPONIBLE') || pageText.includes('A PARTIR DE') || pageText.includes('NO DISPONIBLE')) {
+                        // Si el texto dice COMPLETO o SIN PLAZAS, pero no hemos encontrado el botón de espera, quizá es que la cola también está llena
+                        if (pageText.includes('COMPLETO') || pageText.includes('SIN PLAZAS') || pageText.includes('NO HAY PLAZAS')) {
+                            // Re-intentar buscar botón de espera por si acaso
+                            const retryWait = allButtons.find(b => b.textContent.toUpperCase().includes('ESPERA'));
+                            if (retryWait && !retryWait.disabled) {
+                                retryWait.click();
+                                return { state: 'waitlist_clicked', label: retryWait.textContent.trim() };
+                            }
+                            return { state: 'full_no_waitlist' };
+                        }
+
+                        if (pageText.includes('RESERVA DISPONIBLE') || pageText.includes('A PARTIR DE') || (pageText.includes('NO DISPONIBLE') && !pageText.includes('MODALIDAD'))) {
                             return { state: 'not_open_yet' };
                         }
 
@@ -294,8 +324,12 @@ async function runGymScraper(userId, schedule) {
                         await user.update({ lastExecutionStatus: 'Ya reservado', lastExecutionTime: new Date() });
 
                     } else if (estadoReserva.state === 'not_open_yet') {
-                        addLog(userId, '⏰ Las plazas aún no están abiertas.');
+                        addLog(userId, '⏰ Las plazas aún no están abiertas para esta fecha.');
                         await user.update({ lastExecutionStatus: 'Reserva no abierta', lastExecutionTime: new Date() });
+
+                    } else if (estadoReserva.state === 'full_no_waitlist') {
+                        addLog(userId, '🚫 Clase completa y lista de espera llena o no disponible.');
+                        await user.update({ lastExecutionStatus: 'Clase/Cola Llena', lastExecutionTime: new Date() });
 
                     } else {
                         addLog(userId, `❌ Estado desconocido. Botones presentes: ${(estadoReserva.buttons || []).join(', ')}`);
