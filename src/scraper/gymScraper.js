@@ -3,6 +3,8 @@ const moment = require('moment');
 const { decrypt } = require('../utils/encryption');
 const User = require('../models/User');
 const { addLog } = require('../utils/scraperLog');
+const fs = require('fs');
+const path = require('path');
 
 async function runGymScraper(userId, schedule) {
     const user = await User.findByPk(userId);
@@ -19,6 +21,21 @@ async function runGymScraper(userId, schedule) {
     }
 
     let browser = null;
+    let screenshotCount = 1;
+
+    async function takeStepScreenshot(page, stepName) {
+        try {
+            const dir = path.join(process.cwd(), 'screenshots', userId.toString(), moment().format('YYYY-MM-DD_HH-mm'));
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            const fileName = `${screenshotCount.toString().padStart(2, '0')}_${stepName}.png`;
+            const filePath = path.join(dir, fileName);
+            await page.screenshot({ path: filePath });
+            screenshotCount++;
+        } catch (err) {
+            console.error('[Scraper] Error taking screenshot:', err.message);
+        }
+    }
+
     try {
         const className = schedule ? schedule.className : 'Default';
         addLog(userId, `🤖 Iniciando bot para: ${user.username} → ${className}`);
@@ -45,10 +62,10 @@ async function runGymScraper(userId, schedule) {
         // Use a real browser User Agent to avoid being blocked as a bot
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
 
-        // Optimizar uso de red en producción (Keep stylesheets for better rendering/interaction)
+        // Optimizar uso de red en producción (Allow images for screenshots if needed)
         await page.setRequestInterception(true);
         page.on('request', (req) => {
-            const blocked = ['image', 'font', 'media'];
+            const blocked = ['font', 'media']; // Removed 'image' to allow screenshots to be useful
             if (blocked.includes(req.resourceType())) {
                 req.abort();
             } else {
@@ -59,6 +76,8 @@ async function runGymScraper(userId, schedule) {
         addLog(userId, `🔗 Navegando a: ${targetUrl}`);
         // networkidle2 is safer for heavy JS apps (Ionic)
         await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 45000 });
+        await takeStepScreenshot(page, 'login_page_loaded');
+
         addLog(userId, '🔑 Introduciendo credenciales...');
 
         const userSelector = 'input[aria-label="Usuario"]';
@@ -78,6 +97,7 @@ async function runGymScraper(userId, schedule) {
             if (btn) btn.click();
         }, buttonSelector);
 
+        await takeStepScreenshot(page, 'login_submitted');
         addLog(userId, '🚀 Enviando formulario de login...');
 
         // Verify login success
@@ -87,6 +107,7 @@ async function runGymScraper(userId, schedule) {
         ).then(() => true).catch(() => false);
 
         if (!loginOk) {
+            await takeStepScreenshot(page, 'login_error');
             addLog(userId, '❌ Login fallido: credenciales incorrectas o timeout.');
             await user.update({ lastExecutionStatus: 'Error: Login fallido', lastExecutionTime: new Date() });
             return;
@@ -102,6 +123,7 @@ async function runGymScraper(userId, schedule) {
         }
 
         addLog(userId, '✅ Login correcto. Buscando "Reserva de Actividades"...');
+        await takeStepScreenshot(page, 'dashboard_loaded');
         await new Promise(r => setTimeout(r, 1000));
 
         const clicked = await page.evaluate(() => {
@@ -118,6 +140,7 @@ async function runGymScraper(userId, schedule) {
             addLog(userId, '📅 Navegando al calendario de reservas...');
             await page.waitForFunction(() => window.location.href.includes('reservation/classes'), { timeout: 10000 }).catch(() => { });
             await new Promise(r => setTimeout(r, 1000));
+            await takeStepScreenshot(page, 'calendar_loaded');
 
             await page.waitForSelector('.calendar-wrapper .date', { timeout: 10000 });
 
@@ -149,6 +172,7 @@ async function runGymScraper(userId, schedule) {
                 const targetClassName = schedule ? schedule.className : 'PILATES';
                 const targetClassTime = schedule ? schedule.time : '20:00';
                 addLog(userId, `🏋️ Buscando clase: "${targetClassName}" a las ${targetClassTime}...`);
+                await takeStepScreenshot(page, 'day_selected');
 
                 const claseClickeada = await page.evaluate((name, time) => {
                     const items = document.querySelectorAll('ion-item.listItem');
@@ -167,6 +191,7 @@ async function runGymScraper(userId, schedule) {
 
                 if (claseClickeada) {
                     await new Promise(r => setTimeout(r, 1500));
+                    await takeStepScreenshot(page, 'class_details_loaded');
                     addLog(userId, '✅ Clase encontrada. Analizando estado de la reserva...');
 
                     const estadoReserva = await page.evaluate(() => {
@@ -207,6 +232,7 @@ async function runGymScraper(userId, schedule) {
 
                     if (estadoReserva.state === 'reserve_clicked') {
                         addLog(userId, '💬 Botón de reserva pulsado. Esperando confirmación...');
+                        await takeStepScreenshot(page, 'waiting_confirmation_dialog');
                         await page.waitForSelector('ion-alert .alert-button-role-accept', { visible: true, timeout: 6000 });
                         const confirmacionDefinitiva = await page.evaluate(() => {
                             const acceptBtn = Array.from(document.querySelectorAll('ion-alert button')).find(b => b.textContent.trim().toUpperCase() === 'ACEPTAR');
@@ -215,9 +241,11 @@ async function runGymScraper(userId, schedule) {
                         });
                         if (confirmacionDefinitiva) {
                             addLog(userId, '🎉 ¡Reserva confirmada con éxito!');
+                            await takeStepScreenshot(page, 'booking_confirmed');
                             await user.update({ lastExecutionStatus: 'Success', lastExecutionTime: new Date() });
                         } else {
                             addLog(userId, '❌ No se pudo confirmar la reserva (botón Aceptar no detectado).');
+                            await takeStepScreenshot(page, 'confirmation_failed');
                             await user.update({ lastExecutionStatus: 'Error: Confirmation failed', lastExecutionTime: new Date() });
                         }
 
@@ -269,6 +297,10 @@ async function runGymScraper(userId, schedule) {
 
     } catch (error) {
         addLog(userId, `💥 Error inesperado: ${error.message}`);
+        if (browser) {
+            const pages = await browser.pages();
+            if (pages.length > 0) await takeStepScreenshot(pages[0], 'unexpected_error');
+        }
         await user.update({ lastExecutionStatus: 'System Error', lastExecutionTime: new Date() });
     } finally {
         if (browser) {

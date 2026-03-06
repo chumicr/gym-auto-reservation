@@ -31,13 +31,13 @@ function setLoading(btn, loading, originalText) {
 
 /* ── UTIL: toggle views ─────────────────────── */
 function toggleViews(view) {
-    authView.classList.add('hidden');
-    userView.classList.add('hidden');
-    adminView.classList.add('hidden');
+    authView.classList.add('d-none');
+    userView.classList.add('d-none');
+    adminView.classList.add('d-none');
 
-    if (view === 'auth') authView.classList.remove('hidden');
-    if (view === 'user') userView.classList.remove('hidden');
-    if (view === 'admin') adminView.classList.remove('hidden');
+    if (view === 'auth') authView.classList.remove('d-none');
+    if (view === 'user') userView.classList.remove('d-none');
+    if (view === 'admin') adminView.classList.remove('d-none');
 }
 
 /* ── AUTH FORM submit ───────────────────────── */
@@ -75,13 +75,13 @@ document.getElementById('auth-form').addEventListener('submit', async (e) => {
 // Toggle password visibility
 document.querySelectorAll('.toggle-password').forEach(btn => {
     btn.addEventListener('click', function () {
-        const input = this.closest('.input-wrapper').querySelector('input');
+        const input = this.closest('.input-group').querySelector('input');
         if (input.type === 'password') {
             input.type = 'text';
-            this.textContent = '🙈';
+            this.innerHTML = '<i class="bi bi-eye-slash"></i>';
         } else {
             input.type = 'password';
-            this.textContent = '👁️';
+            this.innerHTML = '<i class="bi bi-eye"></i>';
         }
     });
 });
@@ -92,9 +92,9 @@ async function showDashboard() {
     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
     if (userRole === 'admin') {
-        document.getElementById('go-admin-btn').classList.remove('hidden');
+        document.getElementById('go-admin-btn').classList.remove('d-none');
     } else {
-        document.getElementById('go-admin-btn').classList.add('hidden');
+        document.getElementById('go-admin-btn').classList.add('d-none');
     }
 
     try {
@@ -115,22 +115,22 @@ async function showDashboard() {
         const warningEl = document.getElementById('credentials-warning');
 
         if (user.password) {
-            warningEl.classList.add('hidden');
+            warningEl.classList.add('d-none');
         } else {
-            warningEl.classList.remove('hidden');
+            warningEl.classList.remove('d-none');
         }
 
         // Status
         const statusEl = document.getElementById('last-status');
         statusEl.textContent = user.lastExecutionStatus || 'Desconocido';
-        statusEl.className = 'status-badge';
+        statusEl.className = 'badge';
         const s = (user.lastExecutionStatus || '').toLowerCase();
         if (s.includes('ok') || s.includes('éxito') || s.includes('success')) {
-            statusEl.classList.add('status-success');
+            statusEl.classList.add('bg-success');
         } else if (s.includes('error') || s.includes('fallo')) {
-            statusEl.classList.add('status-error');
+            statusEl.classList.add('bg-danger');
         } else {
-            statusEl.classList.add('status-pending');
+            statusEl.classList.add('bg-warning', 'text-dark');
         }
 
         document.getElementById('last-time').textContent = user.lastExecutionTime
@@ -163,31 +163,28 @@ async function loadSchedules() {
         const days = ['—', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
         if (res.data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--text-secondary);">No tienes clases programadas</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-secondary py-3">No tienes clases programadas</td></tr>';
             return;
         }
 
         const credentialsOk = !!document.getElementById('gym-password').value;
 
         res.data.forEach(s => {
-            const playBtnAttr = credentialsOk ? '' : 'disabled style="opacity: 0.4" title="Configura la contraseña"';
+            const playBtnAttr = credentialsOk ? '' : 'disabled title="Configura la contraseña"';
             tbody.innerHTML += `
                 <tr>
-                    <td><strong>${s.className}</strong></td>
+                    <td class="fw-bold">${s.className}</td>
                     <td>${days[s.dayOfWeek]}</td>
                     <td>${s.time}</td>
-                    <td>
-                        <div style="display:flex; justify-content:center;">
-                            <label class="switch" aria-label="Programar auto-scraping" style="transform: scale(0.85);">
-                                <input type="checkbox" onchange="toggleScheduleAutoScrape('${s.id}', this.checked)" ${s.autoScrape ? 'checked' : ''}>
-                                <span class="slider"></span>
-                            </label>
+                    <td class="text-center">
+                        <div class="form-check form-switch d-flex justify-content-center m-0">
+                            <input class="form-check-input" type="checkbox" onchange="toggleScheduleAutoScrape('${s.id}', this.checked)" ${s.autoScrape ? 'checked' : ''}>
                         </div>
                     </td>
-                    <td>
-                        <div style="display:flex; gap:0.5rem; justify-content:center;">
-                            <button onclick="executeSchedule('${s.id}')" class="btn-sm success" id="btn-exec-${s.id}" ${playBtnAttr}>▶</button>
-                            <button onclick="deleteSchedule('${s.id}')" class="btn-sm danger">🗑</button>
+                    <td class="text-center">
+                        <div class="d-flex gap-2 justify-content-center">
+                            <button onclick="executeSchedule('${s.id}')" class="btn btn-sm btn-success" id="btn-exec-${s.id}" ${playBtnAttr}><i class="bi bi-play-fill"></i></button>
+                            <button onclick="deleteSchedule('${s.id}')" class="btn btn-sm btn-danger"><i class="bi bi-trash-fill"></i></button>
                         </div>
                     </td>
                 </tr>
@@ -383,7 +380,7 @@ async function executeSchedule(id) {
 async function loadAdminPanel() {
     toggleViews('admin');
     const tbody = document.querySelector('#users-table tbody');
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-secondary); padding:2rem;">⏳ Cargando usuarios...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-secondary py-4"><span class="spinner-border spinner-border-sm"></span> Cargando usuarios...</td></tr>';
 
     try {
         const res = await axios.get(`${API_URL}/api/admin/users`);
@@ -391,14 +388,14 @@ async function loadAdminPanel() {
         res.data.forEach(u => {
             tbody.innerHTML += `
                 <tr>
-                    <td><strong>${u.username}</strong></td>
-                    <td><span class="status-badge" style="background:var(--accent-glow); color:var(--accent);">${u.role}</span></td>
+                    <td class="fw-bold">${u.username}</td>
+                    <td><span class="badge bg-primary bg-opacity-25 text-primary border border-primary">${u.role}</span></td>
                     <td>${u.username}</td>
-                    <td>${u.autoScrape ? '✅' : '—'}</td>
-                    <td style="font-size:0.8rem">${u.lastExecutionStatus || '—'}</td>
-                    <td>${u.role !== 'admin'
-                    ? `<button onclick="deleteUser('${u.id}')" class="btn-sm danger">🗑 Eliminar</button>`
-                    : '<span style="color:var(--text-muted)">—</span>'
+                    <td class="text-center">${u.autoScrape ? '<i class="bi bi-check-circle-fill text-success"></i>' : '<span class="text-secondary">—</span>'}</td>
+                    <td class="small">${u.lastExecutionStatus || '—'}</td>
+                    <td class="text-center">${u.role !== 'admin'
+                    ? `<button onclick="deleteUser('${u.id}')" class="btn btn-sm btn-danger"><i class="bi bi-trash-fill"></i> Eliminar</button>`
+                    : '<span class="text-secondary">—</span>'
                 }</td>
                 </tr>
             `;
@@ -482,9 +479,10 @@ function saveLogToStorage(time, msg, type) {
 }
 
 function renderLogEntry(log, time, msg, type) {
-    const line = document.createElement('span');
-    line.className = `log-line ${type}`;
-    line.innerHTML = `<span class="log-time">[${time}]</span><span class="log-msg"> ${msg}</span>`;
+    const line = document.createElement('div');
+    const typeClass = type === 'success' ? 'text-success' : type === 'error' ? 'text-danger' : type === 'warning' ? 'text-warning' : 'text-info';
+    line.className = `mb-1 ${typeClass}`;
+    line.innerHTML = `<span class="opacity-50">[${time}]</span> <span>${msg}</span>`;
     log.appendChild(line);
     log.scrollTop = log.scrollHeight;
 }
