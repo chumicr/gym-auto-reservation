@@ -42,10 +42,13 @@ async function runGymScraper(userId, schedule) {
 
         const page = await browser.newPage();
 
-        // Optimizar uso de red en producción
+        // Use a real browser User Agent to avoid being blocked as a bot
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+
+        // Optimizar uso de red en producción (Keep stylesheets for better rendering/interaction)
         await page.setRequestInterception(true);
         page.on('request', (req) => {
-            const blocked = ['image', 'stylesheet', 'font', 'media'];
+            const blocked = ['image', 'font', 'media'];
             if (blocked.includes(req.resourceType())) {
                 req.abort();
             } else {
@@ -54,14 +57,15 @@ async function runGymScraper(userId, schedule) {
         });
 
         addLog(userId, `🔗 Navegando a: ${targetUrl}`);
-        await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        // networkidle2 is safer for heavy JS apps (Ionic)
+        await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 45000 });
         addLog(userId, '🔑 Introduciendo credenciales...');
 
         const userSelector = 'input[aria-label="Usuario"]';
         const passSelector = 'input[aria-label="Contraseña"]';
 
-        await page.waitForSelector(userSelector, { timeout: 10000 });
-        await page.waitForSelector(passSelector, { timeout: 10000 });
+        await page.waitForSelector(userSelector, { timeout: 15000 });
+        await page.waitForSelector(passSelector, { timeout: 15000 });
 
         await page.type(userSelector, username, { delay: 30 });
         await page.type(passSelector, password, { delay: 30 });
